@@ -12,12 +12,13 @@
 // ============================================================
 
 var firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyBFGvEczqs_7o53pdmYnVyC7ijufXnnQ6E",
+    authDomain: "words-store-878b2.firebaseapp.com",
+    projectId: "words-store-878b2",
+    storageBucket: "words-store-878b2.firebasestorage.app",
+    messagingSenderId: "1009550901316",
+    appId: "1:1009550901316:web:e5cda3619bcd5ab36a7c11",
+    measurementId: "G-7H9RNJPNCZ"
 };
 
 firebase.initializeApp(firebaseConfig);
