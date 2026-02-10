@@ -426,6 +426,41 @@ td .date-text {
     text-align: left;
 }
 
+.auth-divider {
+    display: flex;
+    align-items: center;
+    margin: 1.25rem 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+.auth-divider span {
+    padding: 0 0.75rem;
+}
+
+.auth-google-btn {
+    width: 100%;
+    padding: 0.6rem;
+    font-size: 0.9rem;
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    gap: 0.5rem;
+}
+
+.auth-google-btn:hover {
+    background: var(--bg);
+    border-color: var(--text-muted);
+}
+
 .auth-toggle-text {
     margin-top: 1.25rem;
     font-size: 0.85rem;

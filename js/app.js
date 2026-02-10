@@ -14,6 +14,8 @@
     var signOutBtn = document.getElementById("sign-out-btn");
     var userEmailEl = document.getElementById("user-email");
 
+    var googleSignInBtn = document.getElementById("google-sign-in-btn");
+
     var isSignUp = false;
     var currentUser = null;
 
@@ -70,6 +72,17 @@
 
     signOutBtn.addEventListener("click", function () {
         auth.signOut();
+    });
+
+    // Google Sign-In
+    googleSignInBtn.addEventListener("click", function () {
+        hideAuthError();
+        var provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider).catch(function (error) {
+            if (error.code !== "auth/popup-closed-by-user") {
+                showAuthError(error.message || "Google sign-in failed.");
+            }
+        });
     });
 
     // ===== Auth State Listener =====
