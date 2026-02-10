@@ -1,47 +1,146 @@
 (function () {
     "use strict";
 
+    // ===== Auth =====
+    var authScreen = document.getElementById("auth-screen");
+    var appContainer = document.getElementById("app-container");
+    var authForm = document.getElementById("auth-form");
+    var authEmailInput = document.getElementById("auth-email");
+    var authPasswordInput = document.getElementById("auth-password");
+    var authError = document.getElementById("auth-error");
+    var authSubmitBtn = document.getElementById("auth-submit-btn");
+    var authToggleBtn = document.getElementById("auth-toggle-btn");
+    var authToggleMsg = document.getElementById("auth-toggle-msg");
+    var signOutBtn = document.getElementById("sign-out-btn");
+    var userEmailEl = document.getElementById("user-email");
+
+    var isSignUp = false;
+    var currentUser = null;
+
+    function showAuthError(msg) {
+        authError.textContent = msg;
+        authError.style.display = "block";
+    }
+
+    function hideAuthError() {
+        authError.style.display = "none";
+    }
+
+    authToggleBtn.addEventListener("click", function () {
+        isSignUp = !isSignUp;
+        if (isSignUp) {
+            authSubmitBtn.textContent = "Sign Up";
+            authToggleMsg.textContent = "Already have an account?";
+            authToggleBtn.textContent = "Sign In";
+        } else {
+            authSubmitBtn.textContent = "Sign In";
+            authToggleMsg.textContent = "Don't have an account?";
+            authToggleBtn.textContent = "Sign Up";
+        }
+        hideAuthError();
+    });
+
+    authForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        hideAuthError();
+        var email = authEmailInput.value.trim();
+        var password = authPasswordInput.value;
+
+        if (!email || !password) return;
+
+        authSubmitBtn.disabled = true;
+        authSubmitBtn.textContent = isSignUp ? "Signing up..." : "Signing in...";
+
+        var promise = isSignUp
+            ? auth.createUserWithEmailAndPassword(email, password)
+            : auth.signInWithEmailAndPassword(email, password);
+
+        promise.catch(function (error) {
+            var msg = error.message || "Authentication failed.";
+            if (error.code === "auth/user-not-found") msg = "No account found with this email.";
+            if (error.code === "auth/wrong-password") msg = "Incorrect password.";
+            if (error.code === "auth/invalid-credential") msg = "Invalid email or password.";
+            if (error.code === "auth/email-already-in-use") msg = "An account with this email already exists.";
+            if (error.code === "auth/weak-password") msg = "Password should be at least 6 characters.";
+            showAuthError(msg);
+            authSubmitBtn.disabled = false;
+            authSubmitBtn.textContent = isSignUp ? "Sign Up" : "Sign In";
+        });
+    });
+
+    signOutBtn.addEventListener("click", function () {
+        auth.signOut();
+    });
+
+    // ===== Auth State Listener =====
+    auth.onAuthStateChanged(function (user) {
+        if (user) {
+            currentUser = user;
+            authScreen.style.display = "none";
+            appContainer.style.display = "";
+            userEmailEl.textContent = user.email;
+            initApp();
+        } else {
+            currentUser = null;
+            authScreen.style.display = "";
+            appContainer.style.display = "none";
+            userEmailEl.textContent = "";
+            authSubmitBtn.disabled = false;
+            authSubmitBtn.textContent = isSignUp ? "Sign Up" : "Sign In";
+            stopFirestoreSync();
+            words = [];
+        }
+    });
+
     // ===== Storage =====
     var COLLECTION = "words";
-    var LOCAL_KEY = "english_words";
 
-    // Local cache for offline fallback
+    function userLocalKey() {
+        return currentUser ? "english_words_" + currentUser.uid : "english_words";
+    }
+
     function loadLocalWords() {
         try {
-            return JSON.parse(localStorage.getItem(LOCAL_KEY)) || [];
+            return JSON.parse(localStorage.getItem(userLocalKey())) || [];
         } catch {
             return [];
         }
     }
 
     function saveLocalWords(wordsList) {
-        localStorage.setItem(LOCAL_KEY, JSON.stringify(wordsList));
+        localStorage.setItem(userLocalKey(), JSON.stringify(wordsList));
     }
 
-    // Firestore helpers
+    // Firestore helpers — store under users/{uid}/words
     function isFirebaseReady() {
         return typeof db !== "undefined" &&
             typeof firebaseConfig !== "undefined" &&
-            firebaseConfig.apiKey !== "YOUR_API_KEY";
+            firebaseConfig.apiKey !== "YOUR_API_KEY" &&
+            currentUser;
+    }
+
+    function userWordsCollection() {
+        return db.collection("users").doc(currentUser.uid).collection(COLLECTION);
     }
 
     function firestoreAdd(word) {
         if (!isFirebaseReady()) return Promise.resolve();
-        return db.collection(COLLECTION).doc(word.id).set(word);
+        return userWordsCollection().doc(word.id).set(word);
     }
 
     function firestoreUpdate(id, data) {
         if (!isFirebaseReady()) return Promise.resolve();
-        return db.collection(COLLECTION).doc(id).update(data);
+        return userWordsCollection().doc(id).update(data);
     }
 
     function firestoreDelete(id) {
         if (!isFirebaseReady()) return Promise.resolve();
-        return db.collection(COLLECTION).doc(id).delete();
+        return userWordsCollection().doc(id).delete();
     }
 
     // ===== State =====
-    var words = loadLocalWords();
+    var words = [];
+    var unsubscribeSync = null;
 
     // ===== DOM References =====
     var form = document.getElementById("word-form");
@@ -357,7 +456,7 @@
     function startFirestoreSync() {
         if (!isFirebaseReady()) return;
 
-        db.collection(COLLECTION)
+        unsubscribeSync = userWordsCollection()
             .orderBy("createdAt", "desc")
             .onSnapshot(function (snapshot) {
                 words = [];
@@ -371,7 +470,17 @@
             });
     }
 
-    // ===== Initial Render =====
-    render();
-    startFirestoreSync();
+    function stopFirestoreSync() {
+        if (unsubscribeSync) {
+            unsubscribeSync();
+            unsubscribeSync = null;
+        }
+    }
+
+    // ===== Init App (called on auth) =====
+    function initApp() {
+        words = loadLocalWords();
+        render();
+        startFirestoreSync();
+    }
 })();
