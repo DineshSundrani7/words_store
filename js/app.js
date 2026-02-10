@@ -2,43 +2,67 @@
     "use strict";
 
     // ===== Storage =====
-    const STORAGE_KEY = "english_words";
+    var COLLECTION = "words";
+    var LOCAL_KEY = "english_words";
 
-    function loadWords() {
+    // Local cache for offline fallback
+    function loadLocalWords() {
         try {
-            return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+            return JSON.parse(localStorage.getItem(LOCAL_KEY)) || [];
         } catch {
             return [];
         }
     }
 
-    function saveWords(words) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+    function saveLocalWords(wordsList) {
+        localStorage.setItem(LOCAL_KEY, JSON.stringify(wordsList));
+    }
+
+    // Firestore helpers
+    function isFirebaseReady() {
+        return typeof db !== "undefined" &&
+            typeof firebaseConfig !== "undefined" &&
+            firebaseConfig.apiKey !== "YOUR_API_KEY";
+    }
+
+    function firestoreAdd(word) {
+        if (!isFirebaseReady()) return Promise.resolve();
+        return db.collection(COLLECTION).doc(word.id).set(word);
+    }
+
+    function firestoreUpdate(id, data) {
+        if (!isFirebaseReady()) return Promise.resolve();
+        return db.collection(COLLECTION).doc(id).update(data);
+    }
+
+    function firestoreDelete(id) {
+        if (!isFirebaseReady()) return Promise.resolve();
+        return db.collection(COLLECTION).doc(id).delete();
     }
 
     // ===== State =====
-    let words = loadWords();
+    var words = loadLocalWords();
 
     // ===== DOM References =====
-    const form = document.getElementById("word-form");
-    const formTitle = document.getElementById("form-title");
-    const editIdInput = document.getElementById("edit-id");
-    const wordInput = document.getElementById("word-input");
-    const meaningInput = document.getElementById("meaning-input");
-    const exampleInput = document.getElementById("example-input");
-    const categorySelect = document.getElementById("category-select");
-    const submitBtn = document.getElementById("submit-btn");
-    const cancelBtn = document.getElementById("cancel-btn");
-    const searchInput = document.getElementById("search-input");
-    const filterCategory = document.getElementById("filter-category");
-    const sortSelect = document.getElementById("sort-select");
-    const tbody = document.getElementById("words-tbody");
-    const emptyState = document.getElementById("empty-state");
-    const wordCountEl = document.getElementById("word-count");
-    const themeToggle = document.getElementById("theme-toggle");
-    const exportJsonBtn = document.getElementById("export-json-btn");
-    const exportCsvBtn = document.getElementById("export-csv-btn");
-    const importFile = document.getElementById("import-file");
+    var form = document.getElementById("word-form");
+    var formTitle = document.getElementById("form-title");
+    var editIdInput = document.getElementById("edit-id");
+    var wordInput = document.getElementById("word-input");
+    var meaningInput = document.getElementById("meaning-input");
+    var exampleInput = document.getElementById("example-input");
+    var categorySelect = document.getElementById("category-select");
+    var submitBtn = document.getElementById("submit-btn");
+    var cancelBtn = document.getElementById("cancel-btn");
+    var searchInput = document.getElementById("search-input");
+    var filterCategory = document.getElementById("filter-category");
+    var sortSelect = document.getElementById("sort-select");
+    var tbody = document.getElementById("words-tbody");
+    var emptyState = document.getElementById("empty-state");
+    var wordCountEl = document.getElementById("word-count");
+    var themeToggle = document.getElementById("theme-toggle");
+    var exportJsonBtn = document.getElementById("export-json-btn");
+    var exportCsvBtn = document.getElementById("export-csv-btn");
+    var importFile = document.getElementById("import-file");
 
     // ===== Unique ID Generator =====
     function generateId() {
@@ -47,7 +71,7 @@
 
     // ===== Render =====
     function render() {
-        const filtered = getFilteredWords();
+        var filtered = getFilteredWords();
         wordCountEl.textContent = words.length + (words.length === 1 ? " word" : " words");
 
         if (filtered.length === 0) {
@@ -112,7 +136,7 @@
             case "alpha-desc":
                 list.sort(function (a, b) { return b.word.localeCompare(a.word); });
                 break;
-            default: // newest
+            default:
                 list.sort(function (a, b) { return b.createdAt - a.createdAt; });
         }
 
@@ -147,31 +171,34 @@
         if (!word || !meaning) return;
 
         if (editId) {
-            // Update existing
+            var updateData = {
+                word: word,
+                meaning: meaning,
+                example: example,
+                category: category,
+            };
             words = words.map(function (w) {
                 if (w.id === editId) {
-                    return Object.assign({}, w, {
-                        word: word,
-                        meaning: meaning,
-                        example: example,
-                        category: category,
-                    });
+                    return Object.assign({}, w, updateData);
                 }
                 return w;
             });
+            saveLocalWords(words);
+            firestoreUpdate(editId, updateData);
         } else {
-            // Add new
-            words.push({
+            var newWord = {
                 id: generateId(),
                 word: word,
                 meaning: meaning,
                 example: example,
                 category: category,
                 createdAt: Date.now(),
-            });
+            };
+            words.push(newWord);
+            saveLocalWords(words);
+            firestoreAdd(newWord);
         }
 
-        saveWords(words);
         resetForm();
         render();
     });
@@ -209,8 +236,8 @@
         if (e.target.classList.contains("btn-delete")) {
             if (!confirm('Delete "' + words.find(function (item) { return item.id === id; }).word + '"?')) return;
             words = words.filter(function (item) { return item.id !== id; });
-            saveWords(words);
-            // If we were editing this word, reset the form
+            saveLocalWords(words);
+            firestoreDelete(id);
             if (editIdInput.value === id) resetForm();
             render();
         }
@@ -233,7 +260,6 @@
         applyTheme(current === "dark" ? "light" : "dark");
     });
 
-    // Load saved theme
     (function () {
         var saved = localStorage.getItem("theme") || "light";
         applyTheme(saved);
@@ -303,18 +329,20 @@
                 var count = 0;
                 imported.forEach(function (item) {
                     if (item.word && item.meaning) {
-                        words.push({
+                        var newWord = {
                             id: item.id || generateId(),
                             word: item.word,
                             meaning: item.meaning,
                             example: item.example || "",
                             category: item.category || "",
                             createdAt: item.createdAt || Date.now(),
-                        });
+                        };
+                        words.push(newWord);
+                        firestoreAdd(newWord);
                         count++;
                     }
                 });
-                saveWords(words);
+                saveLocalWords(words);
                 render();
                 alert("Imported " + count + " word(s) successfully.");
             } catch {
@@ -325,6 +353,25 @@
         importFile.value = "";
     });
 
+    // ===== Firestore Real-time Sync =====
+    function startFirestoreSync() {
+        if (!isFirebaseReady()) return;
+
+        db.collection(COLLECTION)
+            .orderBy("createdAt", "desc")
+            .onSnapshot(function (snapshot) {
+                words = [];
+                snapshot.forEach(function (doc) {
+                    words.push(doc.data());
+                });
+                saveLocalWords(words);
+                render();
+            }, function (error) {
+                console.warn("Firestore sync error, using local data:", error);
+            });
+    }
+
     // ===== Initial Render =====
     render();
+    startFirestoreSync();
 })();
